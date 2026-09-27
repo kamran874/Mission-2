@@ -5,36 +5,37 @@ conditioner (power, temperature, mode, fan speed, turbo/sleep/swing, and
 on/off timers) directly over your home network — no manufacturer cloud
 account required.
 
-This was built for an Orient/Ultron AC whose stock **Mevris / e-Comfort**
-app and WiFi module had stopped working. Rather than depending on that
-cloud service, the app talks straight to a local HTTP API exposed by the
-AC's WiFi module on your home WiFi.
+This was built for an Orient Ultron/Divine eComfort AC whose stock
+**Mevris** app and cloud service never worked — login and signup fail, a
+widely-reported, ongoing problem with Orient's servers rather than anything
+specific to one AC or account. Rather than depending on that cloud service,
+this app talks to a small local device on your own WiFi.
 
 ## Why local control instead of the manufacturer app
 
-Orient's Ultron/e-Comfort ACs ship with an ESP8266-based WiFi module running
-Orient's **Mevris** cloud firmware. When that module's cloud connection
-breaks (as reported by several owners), the stock app stops working
-entirely, even though the AC itself is fine.
+Orient's Ultron/Divine eComfort ACs ship with an ESP8266-based WiFi module
+that talks to Orient's **Mevris** cloud. When that cloud service is down —
+which, going by app-store reviews and community reports, has been the case
+for a long time — the stock app stops working entirely, even though the AC
+and its WiFi module are both fine.
 
-The community project
+`firmware/` in this repo has the fix that needs no access to the AC at all:
+a standalone **WiFi IR blaster** — a ~$5 ESP8266 board and an IR LED, built
+separately and placed in front of the AC. It reproduces what the physical
+remote does over infrared (Orient's Ultron/Divine line uses the Electra IR
+protocol, already supported by a well-tested open-source library — no
+reverse-engineering needed) and exposes a local REST API that this app
+talks to directly (`/api/status`, `/api/power`, `/api/temp`, `/api/mode`,
+`/api/fan`, `/api/turbo`, `/api/sleep`, `/api/swing`, `/api/light`,
+`/api/timer`). No cloud, no account, no opening the AC. See
+`firmware/README.md` for the parts list, wiring, and flashing steps.
+
+If you'd rather modify the AC's existing WiFi module instead of adding a
+separate device, the community project
 [OpenAC-ESP8266-Smart-AC](https://github.com/harryhassan/OpenAC-ESP8266-Smart-AC)
-replaces that module's firmware with an open, local-only alternative that
-exposes a simple REST API on your home network — no cloud, no account,
-no dependency on a third-party service staying online. This app is a
-control UI built against that same REST API (`/api/status`, `/api/power`,
-`/api/temp`, `/api/mode`, `/api/fan`, `/api/turbo`, `/api/sleep`,
-`/api/swing`, `/api/light`, `/api/timer`).
-
-**Flashing that firmware is a one-time hardware step** (opening the AC's
-WiFi module, wiring a USB-serial adapter, and reflashing it — see that
-project's README for wiring and safety notes; it involves mains voltage, so
-follow its safety guidelines exactly). Once the module runs open firmware
-and reports a local IP address, this app can control it.
-
-If your module already exposes a local status/control API compatible with
-those endpoints (this or a similar firmware), you can skip straight to
-using the app.
+replaces that module's firmware with the same kind of local REST API — more
+invasive (opening the unit, reflashing the existing board near mains
+voltage) but avoids adding new hardware. This app works with either.
 
 ## Using the app
 
@@ -70,12 +71,13 @@ or even the ESP8266 module's own flash storage).
 ### If requests fail with a CORS error
 
 Because this app and the AC's API run on different origins (different
-hosts/ports), the browser enforces CORS: the AC's firmware must respond
+hosts/ports), the browser enforces CORS: the device's firmware must respond
 with an `Access-Control-Allow-Origin` header for the browser to accept the
-response. If the browser console shows a CORS error, either add that header
-to the firmware's HTTP responses, or sidestep the issue entirely by serving
-this app's built `dist/` files from the same device/host as the AC API
-(making every request same-origin).
+response. The IR blaster firmware in `firmware/` already sends this header
+on every response. If you're using different firmware and see a CORS error
+in the browser console, either add that header to it, or sidestep the issue
+entirely by serving this app's built `dist/` files from the same device/host
+as the AC API (making every request same-origin).
 
 ## Development
 

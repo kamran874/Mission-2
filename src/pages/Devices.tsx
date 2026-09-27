@@ -103,15 +103,15 @@ export function Devices() {
             This app talks directly to your AC's WiFi module over your home network — it doesn't go through the
             manufacturer's cloud app, so a broken Mevris/e-Comfort login won't affect it.
           </p>
-          <p>It needs the module to already expose a local status/control API on your WiFi. If yours doesn't yet:</p>
+          <p>It needs a device on your WiFi that exposes a local status/control API. If you don't have one yet:</p>
           <ol className="list-decimal space-y-1 pl-4">
-            <li>Check your router's connected-devices list for the AC's WiFi module and note its IP address.</li>
-            <li>Enter that IP address above (e.g. <code>192.168.1.42</code>) — no need for http:// or a port.</li>
             <li>
-              If the module only speaks the manufacturer's cloud protocol, it needs to be replaced with open firmware
-              first (e.g. the community <em>OpenAC-ESP8266</em> project for Orient/Electra-protocol units) before a
-              local API like this one exists to control.
+              Build the WiFi IR blaster in <code>firmware/</code> — a small standalone gadget you place in front of
+              the AC, no access to the AC itself needed. See <code>firmware/README.md</code> for the parts list and
+              setup.
             </li>
+            <li>Check your router's connected-devices list for the blaster and note its IP address.</li>
+            <li>Enter that IP address above (e.g. <code>192.168.1.42</code>) — no need for http:// or a port.</li>
           </ol>
           <p className="text-white/50">
             Your phone and the AC must be on the same WiFi network. Since the AC serves plain HTTP, install this app
