@@ -47,12 +47,12 @@ npm run preview   # preview the production build
 ### Deploying with GitHub Pages
 
 This repo includes `.github/workflows/deploy-pages.yml`, which builds and deploys
-the app automatically on every push to `main`. To turn it on:
+the app automatically on every push to this branch. To turn it on:
 
 1. In the repo, go to **Settings → Pages** and set **Source** to
    **GitHub Actions**.
-2. Merge this branch into `main` (or push to `main`) — the workflow builds and
-   publishes the app.
+2. Go to the **Actions** tab → **Deploy to GitHub Pages** → **Run workflow**
+   (or just push a new commit) — the workflow builds and publishes the app.
 3. Your Pages URL will be shown in the workflow run and under
    **Settings → Pages**. Open that URL in Safari on your iPhone and add it to
    your Home Screen.
