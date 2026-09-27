@@ -1,37 +1,29 @@
-export type SeriesToken =
-  | 'series-1'
-  | 'series-2'
-  | 'series-3'
-  | 'series-4'
-  | 'series-5'
-  | 'series-6'
-  | 'series-7'
-  | 'series-8'
+export type Mode = 'auto' | 'cool' | 'dry' | 'heat' | 'fan'
+export type FanSpeed = 'auto' | 'low' | 'medium' | 'high'
+export type SwingType = 'v' | 'h'
 
-export interface Category {
+export interface AcStatus {
+  power: boolean
+  targetTemp: number
+  mode: Mode
+  fan: FanSpeed
+  turbo: boolean
+  sleep: boolean
+  hSwing: boolean
+  vSwing?: boolean
+  roomTemp?: number
+  volts?: number
+  amps?: number
+  watts?: number
+  timerActive?: boolean
+  timerAction?: 'on' | 'off'
+  timerRemainingSeconds?: number
+}
+
+export interface Device {
   id: string
   name: string
-  icon: string
-  color: SeriesToken
-  builtIn?: boolean
+  host: string
 }
 
-export interface Expense {
-  id: string
-  date: string // YYYY-MM-DD
-  amount: number
-  categoryId: string
-  note: string
-  createdAt: number
-}
-
-export type ReportPeriod = 'weekly' | 'biweekly' | 'monthly'
-
-export interface Settings {
-  onboarded: boolean
-  startDate: string // YYYY-MM-DD — the day tracking begins
-  currency: string
-  reminderEnabled: boolean
-  reminderTime: string // HH:MM, 24h
-  lastReminderPromptAt?: number
-}
+export type ConnectionState = 'idle' | 'connecting' | 'online' | 'offline'

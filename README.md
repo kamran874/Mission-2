@@ -1,71 +1,89 @@
-# Ledger — Daily Expense Tracker
+# AC Control
 
-A installable web app (PWA) for tracking daily expenses, labeling what each one was
-for, and reviewing weekly / bi-weekly / monthly spending reports. Built with React,
-TypeScript, Tailwind CSS, and Vite. All data is stored locally on-device
-(`localStorage`) — nothing is sent to a server.
+An installable, iPhone-friendly web app for controlling a WiFi-enabled air
+conditioner (power, temperature, mode, fan speed, turbo/sleep/swing, and
+on/off timers) directly over your home network — no manufacturer cloud
+account required.
 
-## Why a PWA instead of a native App Store app
+This was built for an Orient/Ultron AC whose stock **Mevris / e-Comfort**
+app and WiFi module had stopped working. Rather than depending on that
+cloud service, the app talks straight to a local HTTP API exposed by the
+AC's WiFi module on your home WiFi.
 
-Building a native iOS app requires Xcode, a Mac, and an Apple Developer account,
-none of which are available in this environment. A Progressive Web App gives you
-the same result for personal use: an icon on your Home Screen, a full-screen
-standalone window (no Safari chrome), and offline support — installed directly
-from Safari, no App Store review needed.
+## Why local control instead of the manufacturer app
 
-## Features
+Orient's Ultron/e-Comfort ACs ship with an ESP8266-based WiFi module running
+Orient's **Mevris** cloud firmware. When that module's cloud connection
+breaks (as reported by several owners), the stock app stops working
+entirely, even though the AC itself is fine.
 
-- **Onboarding** — pick the date you want to start tracking from, your currency,
-  and a nightly reminder time (defaults to 11:00 PM).
-- **Today** — quick-add an expense with an amount, a category label, and an
-  optional note (e.g. "Lunch with the team").
-- **History** — browse every day since your start date, grouped by date, with
-  inline add/edit/delete.
-- **Reports** — weekly, bi-weekly, and monthly views with a daily spending chart,
-  period-over-period change, and a "where it went" category breakdown so you can
-  see exactly where your money is going.
-- **Settings** — manage categories, currency, export your data as JSON/CSV (share
-  it anywhere via the iOS share sheet), and reminder preferences.
+The community project
+[OpenAC-ESP8266-Smart-AC](https://github.com/harryhassan/OpenAC-ESP8266-Smart-AC)
+replaces that module's firmware with an open, local-only alternative that
+exposes a simple REST API on your home network — no cloud, no account,
+no dependency on a third-party service staying online. This app is a
+control UI built against that same REST API (`/api/status`, `/api/power`,
+`/api/temp`, `/api/mode`, `/api/fan`, `/api/turbo`, `/api/sleep`,
+`/api/swing`, `/api/light`, `/api/timer`).
 
-## Running locally
+**Flashing that firmware is a one-time hardware step** (opening the AC's
+WiFi module, wiring a USB-serial adapter, and reflashing it — see that
+project's README for wiring and safety notes; it involves mains voltage, so
+follow its safety guidelines exactly). Once the module runs open firmware
+and reports a local IP address, this app can control it.
+
+If your module already exposes a local status/control API compatible with
+those endpoints (this or a similar firmware), you can skip straight to
+using the app.
+
+## Using the app
+
+1. Find the AC WiFi module's IP address (check your router's connected
+   devices list, or the module's own setup page).
+2. Open the app, go to **Devices**, and add the AC with that IP address
+   (e.g. `192.168.1.42`).
+3. Switch to **Control** to toggle power, adjust temperature, change mode
+   and fan speed, or set timers.
+
+The app polls the device every few seconds and shows a connection status
+pill (connecting / connected / offline) so it's obvious when the AC drops
+off the network.
+
+### Important: HTTP, not HTTPS
+
+The AC's local API is plain HTTP. If you open this app from an `https://`
+page (like a GitHub Pages deployment), Safari/Chrome will block requests to
+the AC as mixed content. Instead, run and install the app from your own
+network over plain HTTP:
 
 ```bash
 npm install
-npm run dev       # starts a dev server
-npm run build     # production build in dist/
-npm run preview   # preview the production build
+npm run dev -- --host
 ```
 
-## Installing on your iPhone
+Then, on your iPhone (same WiFi), open `http://<your-computer's-LAN-IP>:5173`
+in Safari and use **Share → Add to Home Screen** to install it like a native
+app. For a more permanent setup, `npm run build` and serve the `dist/`
+folder from something always-on on your LAN (a Raspberry Pi, a home server,
+or even the ESP8266 module's own flash storage).
 
-1. Deploy `dist/` somewhere reachable over HTTPS (see below), or run it on your
-   Mac/PC and open the URL in Safari on your iPhone over the same network.
-2. Open the app's URL in **Safari** on your iPhone.
-3. Tap the **Share** icon → **Add to Home Screen** → **Add**.
-4. Launch it from the Home Screen icon — it opens full-screen, like a regular app.
+### If requests fail with a CORS error
 
-### Deploying with GitHub Pages
+Because this app and the AC's API run on different origins (different
+hosts/ports), the browser enforces CORS: the AC's firmware must respond
+with an `Access-Control-Allow-Origin` header for the browser to accept the
+response. If the browser console shows a CORS error, either add that header
+to the firmware's HTTP responses, or sidestep the issue entirely by serving
+this app's built `dist/` files from the same device/host as the AC API
+(making every request same-origin).
 
-This repo includes `.github/workflows/deploy-pages.yml`, which builds and deploys
-the app automatically on every push to this branch. To turn it on:
+## Development
 
-1. In the repo, go to **Settings → Pages** and set **Source** to
-   **GitHub Actions**.
-2. Go to the **Actions** tab → **Deploy to GitHub Pages** → **Run workflow**
-   (or just push a new commit) — the workflow builds and publishes the app.
-3. Your Pages URL will be shown in the workflow run and under
-   **Settings → Pages**. Open that URL in Safari on your iPhone and add it to
-   your Home Screen.
+```bash
+npm install
+npm run dev      # local dev server
+npm run build     # type-check + production build
+npm run lint      # oxlint
+```
 
-## About the nightly reminder
-
-iOS suspends background JavaScript timers once a web app is closed or
-backgrounded, so a purely client-side reminder can only fire reliably **while the
-app is open**. For a guaranteed 11 PM nudge, pair it with an iPhone **Shortcuts**
-automation:
-
-**Shortcuts → Automation → + → Time of Day → set your time → Open App → Ledger**,
-and turn off "Ask Before Running".
-
-That opens the app for you at the time you choose, and the in-app reminder banner
-takes it from there.
+Built with React, TypeScript, Vite, Tailwind CSS, and vite-plugin-pwa.

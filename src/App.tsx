@@ -1,44 +1,20 @@
-import { useEffect, useState } from 'react'
-import { LedgerProvider, useLedger } from './store'
-import { BottomNav, type Tab } from './components/BottomNav'
-import { Onboarding } from './pages/Onboarding'
-import { Today } from './pages/Today'
-import { History } from './pages/History'
-import { Reports } from './pages/Reports'
-import { Settings } from './pages/Settings'
-import { fireNotification, scheduleReminder } from './lib/reminders'
+import { useState } from 'react'
+import { BottomNav, type Page } from './components/BottomNav'
+import { Control } from './pages/Control'
+import { Devices } from './pages/Devices'
+import { Timer } from './pages/Timer'
 
-function AppShell() {
-  const { settings } = useLedger()
-  const [tab, setTab] = useState<Tab>('today')
-
-  useEffect(() => {
-    if (!settings.reminderEnabled) return
-    const cancel = scheduleReminder(settings.reminderTime, () => {
-      fireNotification('Log today\'s expenses', "It's that time — add what you spent today before you forget.")
-    })
-    return cancel
-  }, [settings.reminderEnabled, settings.reminderTime])
-
-  if (!settings.onboarded) return <Onboarding />
+export default function App() {
+  const [page, setPage] = useState<Page>('control')
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--surface-page)' }}>
-      {tab === 'today' && <Today />}
-      {tab === 'history' && <History />}
-      {tab === 'reports' && <Reports />}
-      {tab === 'settings' && <Settings />}
-      <BottomNav active={tab} onChange={setTab} />
+    <div className="safe-top flex min-h-screen flex-col bg-[color:var(--color-bg)] pb-20">
+      <main className="flex-1">
+        {page === 'control' && <Control />}
+        {page === 'timer' && <Timer />}
+        {page === 'devices' && <Devices />}
+      </main>
+      <BottomNav page={page} onChange={setPage} />
     </div>
   )
 }
-
-function App() {
-  return (
-    <LedgerProvider>
-      <AppShell />
-    </LedgerProvider>
-  )
-}
-
-export default App

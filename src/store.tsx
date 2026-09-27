@@ -1,77 +1,169 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
-import type { Category, Expense, Settings } from './types'
-import * as storage from './lib/storage'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
+import * as api from './lib/acApi'
+import { loadActiveDeviceId, loadDevices, makeDeviceId, saveActiveDeviceId, saveDevices } from './lib/storage'
+import type { AcStatus, ConnectionState, Device, FanSpeed, Mode, SwingType } from './types'
 
-interface LedgerContextValue {
-  expenses: Expense[]
-  categories: Category[]
-  settings: Settings
-  addExpense: (input: Omit<Expense, 'id' | 'createdAt'>) => void
-  updateExpense: (id: string, patch: Partial<Expense>) => void
-  deleteExpense: (id: string) => void
-  addCategory: (input: Omit<Category, 'id' | 'builtIn'>) => Category
-  updateSettings: (patch: Partial<Settings>) => void
+const POLL_INTERVAL_MS = 4000
+
+interface AcStore {
+  devices: Device[]
+  activeDevice: Device | null
+  status: AcStatus | null
+  connection: ConnectionState
+  error: string | null
+  busy: boolean
+  addDevice: (name: string, host: string) => Device
+  updateDevice: (id: string, patch: Partial<Omit<Device, 'id'>>) => void
+  removeDevice: (id: string) => void
+  selectDevice: (id: string) => void
+  refresh: () => Promise<void>
+  power: (set: 'on' | 'off' | 'toggle') => Promise<void>
+  temp: (value: number | 'up' | 'down') => Promise<void>
+  mode: (mode: Mode) => Promise<void>
+  fan: (fan: FanSpeed) => Promise<void>
+  turbo: (set: 'on' | 'off' | 'toggle') => Promise<void>
+  sleepMode: (set: 'on' | 'off' | 'toggle') => Promise<void>
+  swing: (type: SwingType) => Promise<void>
+  light: () => Promise<void>
+  stageTimer: (action: 'on' | 'off', minutes: number) => Promise<void>
+  startTimer: () => Promise<void>
+  cancelTimer: () => Promise<void>
 }
 
-const LedgerContext = createContext<LedgerContextValue | null>(null)
+const Ctx = createContext<AcStore | null>(null)
 
-export function LedgerProvider({ children }: { children: ReactNode }) {
-  const [expenses, setExpenses] = useState<Expense[]>(() => storage.getExpenses())
-  const [categories, setCategories] = useState<Category[]>(() => storage.getCategories())
-  const [settings, setSettings] = useState<Settings>(() => storage.getSettings())
+export function AcProvider({ children }: { children: ReactNode }) {
+  const [devices, setDevices] = useState<Device[]>(() => loadDevices())
+  const [activeId, setActiveId] = useState<string | null>(() => loadActiveDeviceId())
+  const [status, setStatus] = useState<AcStatus | null>(null)
+  const [connection, setConnection] = useState<ConnectionState>('idle')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const addExpense = useCallback((input: Omit<Expense, 'id' | 'createdAt'>) => {
-    const expense: Expense = { ...input, id: crypto.randomUUID(), createdAt: Date.now() }
-    setExpenses(storage.addExpense(expense))
+  const activeDevice = devices.find((d) => d.id === activeId) ?? null
+
+  const persistDevices = useCallback((next: Device[]) => {
+    setDevices(next)
+    saveDevices(next)
   }, [])
 
-  const updateExpenseFn = useCallback((id: string, patch: Partial<Expense>) => {
-    setExpenses(storage.updateExpense(id, patch))
-  }, [])
-
-  const deleteExpenseFn = useCallback((id: string) => {
-    setExpenses(storage.deleteExpense(id))
-  }, [])
-
-  const addCategory = useCallback(
-    (input: Omit<Category, 'id' | 'builtIn'>) => {
-      const category: Category = { ...input, id: crypto.randomUUID() }
-      const next = [...categories, category]
-      setCategories(next)
-      storage.saveCategories(next)
-      return category
+  const addDevice = useCallback(
+    (name: string, host: string) => {
+      const device: Device = { id: makeDeviceId(), name: name.trim() || 'AC', host: host.trim() }
+      const next = [...devices, device]
+      persistDevices(next)
+      setActiveId(device.id)
+      saveActiveDeviceId(device.id)
+      return device
     },
-    [categories],
+    [devices, persistDevices],
   )
 
-  const updateSettings = useCallback(
-    (patch: Partial<Settings>) => {
-      const next = { ...settings, ...patch }
-      setSettings(next)
-      storage.saveSettings(next)
+  const updateDevice = useCallback(
+    (id: string, patch: Partial<Omit<Device, 'id'>>) => {
+      persistDevices(devices.map((d) => (d.id === id ? { ...d, ...patch } : d)))
     },
-    [settings],
+    [devices, persistDevices],
   )
 
-  const value = useMemo(
-    () => ({
-      expenses,
-      categories,
-      settings,
-      addExpense,
-      updateExpense: updateExpenseFn,
-      deleteExpense: deleteExpenseFn,
-      addCategory,
-      updateSettings,
-    }),
-    [expenses, categories, settings, addExpense, updateExpenseFn, deleteExpenseFn, addCategory, updateSettings],
+  const removeDevice = useCallback(
+    (id: string) => {
+      const next = devices.filter((d) => d.id !== id)
+      persistDevices(next)
+      if (activeId === id) {
+        const fallback = next[0]?.id ?? null
+        setActiveId(fallback)
+        if (fallback) saveActiveDeviceId(fallback)
+      }
+    },
+    [devices, persistDevices, activeId],
   )
 
-  return <LedgerContext.Provider value={value}>{children}</LedgerContext.Provider>
+  const selectDevice = useCallback((id: string) => {
+    setActiveId(id)
+    saveActiveDeviceId(id)
+    setStatus(null)
+    setConnection('idle')
+  }, [])
+
+  const refresh = useCallback(async () => {
+    if (!activeDevice) return
+    setConnection((c) => (c === 'online' ? c : 'connecting'))
+    try {
+      const next = await api.fetchStatus(activeDevice.host)
+      setStatus(next)
+      setConnection('online')
+      setError(null)
+    } catch (err) {
+      setConnection('offline')
+      setError(err instanceof Error ? err.message : 'Could not reach the device')
+    }
+  }, [activeDevice])
+
+  useEffect(() => {
+    if (pollRef.current) clearInterval(pollRef.current)
+    if (!activeDevice) {
+      setStatus(null)
+      setConnection('idle')
+      return
+    }
+    void refresh()
+    pollRef.current = setInterval(() => void refresh(), POLL_INTERVAL_MS)
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDevice?.id])
+
+  const runAction = useCallback(
+    async (action: () => Promise<void>) => {
+      if (!activeDevice) return
+      setBusy(true)
+      try {
+        await action()
+        await refresh()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Command failed')
+        setConnection('offline')
+      } finally {
+        setBusy(false)
+      }
+    },
+    [activeDevice, refresh],
+  )
+
+  const value: AcStore = {
+    devices,
+    activeDevice,
+    status,
+    connection,
+    error,
+    busy,
+    addDevice,
+    updateDevice,
+    removeDevice,
+    selectDevice,
+    refresh,
+    power: (set) => runAction(() => api.setPower(activeDevice!.host, set)),
+    temp: (v) => runAction(() => api.setTemp(activeDevice!.host, v)),
+    mode: (m) => runAction(() => api.setMode(activeDevice!.host, m)),
+    fan: (f) => runAction(() => api.setFan(activeDevice!.host, f)),
+    turbo: (set) => runAction(() => api.setTurbo(activeDevice!.host, set)),
+    sleepMode: (set) => runAction(() => api.setSleep(activeDevice!.host, set)),
+    swing: (type) => runAction(() => api.setSwing(activeDevice!.host, type)),
+    light: () => runAction(() => api.toggleLight(activeDevice!.host)),
+    stageTimer: (action, minutes) => runAction(() => api.stageTimer(activeDevice!.host, action, minutes)),
+    startTimer: () => runAction(() => api.startTimer(activeDevice!.host)),
+    cancelTimer: () => runAction(() => api.cancelTimer(activeDevice!.host)),
+  }
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 
-export function useLedger(): LedgerContextValue {
-  const ctx = useContext(LedgerContext)
-  if (!ctx) throw new Error('useLedger must be used within LedgerProvider')
+export function useAc(): AcStore {
+  const ctx = useContext(Ctx)
+  if (!ctx) throw new Error('useAc must be used within AcProvider')
   return ctx
 }
